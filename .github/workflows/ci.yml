@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-for-build
+
+  database-and-e2e:
+    runs-on: ubuntu-latest
+    needs: checks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase (migrations + fictional seed)
+        run: npx supabase start -x imgproxy,mailpit,postgres-meta,supavisor,vector,logflare
+      - name: Write .env.local from the local stack
+        run: |
+          npx supabase status -o env --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
+            --override-name auth.publishable_key=NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
+            --override-name auth.secret_key=SUPABASE_SECRET_KEY > .env.local
+          echo "NEXT_PUBLIC_SITE_URL=http://localhost:3000" >> .env.local
+          echo "AUTH_RATE_LIMIT_PER_MINUTE=500" >> .env.local
+          echo "AUTH_RATE_LIMIT_PER_ACCOUNT=200" >> .env.local
+      - name: Integration tests (RLS with real user tokens)
+        run: pnpm test:integration
+      - name: Reset database for E2E
+        run: npx supabase db reset
+      - name: E2E tests
+        run: npx playwright install --with-deps chromium && pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: test-results/

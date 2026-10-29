@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: allow plain HTTP so a local development server
+     (e.g. http://10.0.2.2:3000 from the emulator) can be used. The app still
+     restricts HTTP to private network addresses (see PortalConfig). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

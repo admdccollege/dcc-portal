@@ -1,0 +1,60 @@
+# Xcode project definition. Generate DCCPortal.xcodeproj with:
+#   brew install xcodegen && xcodegen generate
+name: DCCPortal
+options:
+  bundleIdPrefix: com.damdeichristiancollege
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Optional built-in portal address, e.g. https://portal.example.edu.in
+    # (leave empty to ask on first launch). Override per build:
+    #   xcodebuild ... PORTAL_URL=https://portal.example.edu.in
+    PORTAL_URL: ""
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+targets:
+  DCCPortal:
+    type: application
+    platform: iOS
+    sources:
+      - path: DCCPortal
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.damdeichristiancollege.portal
+        PRODUCT_NAME: DCCPortal
+        PRODUCT_MODULE_NAME: DCCPortal
+        INFOPLIST_FILE: DCCPortal/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
+  DCCPortalTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: DCCPortalTests
+    dependencies:
+      - target: DCCPortal
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.damdeichristiancollege.portal.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  DCCPortal:
+    build:
+      targets:
+        DCCPortal: all
+    test:
+      targets:
+        - DCCPortalTests
+      gatherCoverageData: false
+    archive:
+      config: Release

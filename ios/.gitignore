@@ -1,0 +1,9 @@
+DCCPortal.xcodeproj/
+build/
+.build/
+DerivedData/
+*.ipa
+*.xcarchive
+*.p12
+*.mobileprovision
+xcuserdata/
