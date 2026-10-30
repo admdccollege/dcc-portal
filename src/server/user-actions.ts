@@ -32,11 +32,33 @@ async function createAuthUser(email: string, fullName: string, chosenPassword?: 
     email_confirm: true,
     user_metadata: { full_name: fullName },
   });
-  if (error || !data.user) {
-    if (error?.message?.toLowerCase().includes("already")) throw new ActionError("An account with this email already exists.");
-    throw new ActionError("Could not create the account. Check the email address and try again.");
-  }
+  if (error || !data.user) throw new ActionError(authAdminErrorMessage(error, "Could not create the account"));
   return { userId: data.user.id, password };
+}
+
+/**
+ * Turns a Supabase Auth admin error into a message an administrator can act on,
+ * and logs the underlying cause (visible in the hosting provider's runtime logs).
+ */
+function authAdminErrorMessage(error: { message?: string; code?: string; status?: number } | null, action: string): string {
+  const message = error?.message ?? "no response";
+  const code = error?.code ?? "";
+  const status = error?.status ?? 0;
+  console.error(`[auth admin] ${action}: status=${status} code=${code} message=${message}`);
+  const m = message.toLowerCase();
+  if (code === "email_exists" || code === "user_already_exists" || m.includes("already")) {
+    return "An account with this email already exists.";
+  }
+  if (status === 401 || status === 403 || m.includes("invalid api key") || m.includes("jwt") || code === "no_authorization" || code === "bad_jwt") {
+    return `${action}: the server's Supabase secret key is missing, wrong, or from a different Supabase project. Check SUPABASE_SECRET_KEY in the hosting settings, then redeploy.`;
+  }
+  if (code === "email_address_invalid" || m.includes("email address") && m.includes("invalid")) {
+    return `${action}: Supabase rejected this email address as invalid. Use a real address (test domains such as example.com are refused).`;
+  }
+  if (code === "weak_password" || m.includes("password")) {
+    return `${action}: ${message}`;
+  }
+  return `${action}: ${message}`;
 }
 
 const linkSchema = z.object({ record_id: uuid, email: z.email("Enter a valid email address").max(200) });
@@ -213,9 +235,7 @@ export const updateUser = createAction(
       }
       const admin = createAdminClient();
       const { error } = await admin.auth.admin.updateUserById(input.user_id, { email: input.email, email_confirm: true });
-      if (error) {
-        throw new ActionError(error.message.toLowerCase().includes("already") ? "Another account already uses this email." : "Could not change the email address.");
-      }
+      if (error) throw new ActionError(authAdminErrorMessage(error, "Could not change the email address"));
       // Keep linked records' contact email in step with the login.
       await admin.from("staff").update({ email: input.email }).eq("profile_id", input.user_id);
       await admin.from("students").update({ email: input.email }).eq("profile_id", input.user_id);
@@ -236,7 +256,7 @@ export const deleteUser = createAction(z.object({ user_id: uuid }), { permission
   const snapshot = check(await supabase.rpc("user_deletion_check", { p_user_id: input.user_id }));
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.deleteUser(input.user_id);
-  if (error) throw new ActionError("Could not delete the account. Please try again.");
+  if (error) throw new ActionError(authAdminErrorMessage(error, "Could not delete the account"));
   // Records the user created (payments, marks, attendance, audit history) are kept;
   // linked staff/student records stay and simply lose their login.
   await admin.rpc("log_audit_as", { p_actor: session.userId, p_action: "account.delete", p_entity_type: "profiles", p_entity_id: input.user_id, p_details: snapshot });
@@ -255,7 +275,7 @@ export const setTemporaryPassword = createAction(
     const pw = input.password ?? tempPassword();
     const admin = createAdminClient();
     const { error } = await admin.auth.admin.updateUserById(input.user_id, { password: pw });
-    if (error) throw new ActionError("Could not set the password.");
+    if (error) throw new ActionError(authAdminErrorMessage(error, "Could not set the password"));
     await admin.rpc("log_audit_as", { p_actor: session.userId, p_action: "account.set_password", p_entity_type: "profiles", p_entity_id: input.user_id, p_details: {} });
     return { password: input.password ? null : pw };
   },
