@@ -183,9 +183,30 @@ export const createUser = createAction(
     if (isStudent && input.staff_id) throw new ActionError("A Student login cannot be linked to a staff record.");
 
     const supabase = await createClient();
-    if (input.staff_id) {
-      const staff = one(await supabase.from("staff").select("id, profile_id").eq("id", input.staff_id).single());
-      if (staff.profile_id) throw new ActionError("That staff member already has a login account.");
+
+    // One email = one login. Say plainly who already has it.
+    const { data: existingLogin } = await supabase.from("profiles").select("full_name").eq("email", input.email).maybeSingle();
+    if (existingLogin) {
+      throw new ActionError(`A login with this email already exists (${existingLogin.full_name || input.email}). Use “Edit user & roles” on that account to change its roles.`);
+    }
+
+    // A staff record that already uses this email is the person's own record: link it.
+    let staffId = input.staff_id;
+    if (!isStudent) {
+      const { data: staffWithEmail } = await supabase.from("staff").select("id, full_name, profile_id").eq("email", input.email).maybeSingle();
+      if (staffWithEmail) {
+        if (staffId && staffId !== staffWithEmail.id) {
+          throw new ActionError(`This email is on the staff record of ${staffWithEmail.full_name}. Choose that record under “Staff record”, or use a different email.`);
+        }
+        if (staffWithEmail.profile_id) {
+          throw new ActionError(`${staffWithEmail.full_name}'s staff record is already linked to another login.`);
+        }
+        staffId = staffWithEmail.id;
+      }
+    }
+    if (staffId) {
+      const staff = one(await supabase.from("staff").select("id, full_name, profile_id").eq("id", staffId).single());
+      if (staff.profile_id) throw new ActionError(`${staff.full_name} already has a login account.`);
     }
     if (input.student_id) {
       const student = one(await supabase.from("students").select("id, profile_id").eq("id", input.student_id).single());
@@ -197,18 +218,25 @@ export const createUser = createAction(
     try {
       check(await supabase.rpc("set_user_roles", { p_user_id: userId, p_role_keys: input.roles }));
       if (input.phone) check(await supabase.rpc("admin_update_profile", { p_user_id: userId, p_full_name: input.full_name, p_phone: input.phone }));
-      if (input.staff_id) check(await admin.from("staff").update({ profile_id: userId, email: input.email }).eq("id", input.staff_id));
-      if (input.student_id) check(await admin.from("students").update({ profile_id: userId, email: input.email }).eq("id", input.student_id));
+      // Link the record; fill in its email only if it has none (never overwrite another address).
+      if (staffId) {
+        check(await admin.from("staff").update({ profile_id: userId }).eq("id", staffId));
+        await admin.from("staff").update({ email: input.email }).eq("id", staffId).is("email", null);
+      }
+      if (input.student_id) {
+        check(await admin.from("students").update({ profile_id: userId }).eq("id", input.student_id));
+        await admin.from("students").update({ email: input.email }).eq("id", input.student_id).is("email", null);
+      }
     } catch (err) {
       await admin.auth.admin.deleteUser(userId).catch(() => undefined); // roll back the half-created account
       throw err;
     }
     await admin.rpc("log_audit_as", {
       p_actor: session.userId, p_action: "account.create", p_entity_type: "profiles", p_entity_id: userId,
-      p_details: { email: input.email, roles: input.roles, staff_id: input.staff_id ?? null, student_id: input.student_id ?? null },
+      p_details: { email: input.email, roles: input.roles, staff_id: staffId ?? null, student_id: input.student_id ?? null },
     });
     revalidatePath("/users");
-    return { email: input.email, password: input.password ? null : pw };
+    return { email: input.email, password: input.password ? null : pw, linkedStaff: staffId ? true : false };
   },
 );
 
@@ -259,7 +287,10 @@ export const updateUser = createAction(
           if (staff.profile_id) throw new ActionError(`${staff.full_name} is already linked to another login.`);
         }
         if (currentStaffId) check(await admin.from("staff").update({ profile_id: null }).eq("id", currentStaffId));
-        if (input.staff_id) check(await admin.from("staff").update({ profile_id: input.user_id, email: input.email }).eq("id", input.staff_id));
+        if (input.staff_id) {
+          check(await admin.from("staff").update({ profile_id: input.user_id }).eq("id", input.staff_id));
+          await admin.from("staff").update({ email: input.email }).eq("id", input.staff_id).is("email", null);
+        }
         await admin.rpc("log_audit_as", {
           p_actor: session.userId, p_action: "account.link_staff", p_entity_type: "profiles", p_entity_id: input.user_id,
           p_details: { from_staff_id: currentStaffId || null, to_staff_id: input.staff_id || null },

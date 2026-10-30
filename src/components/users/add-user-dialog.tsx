@@ -28,7 +28,7 @@ export function AddUserDialog({ staff, students, canGrantSuper }: { staff: Linka
   const [pwMode, setPwMode] = useState<"generate" | "set">("generate");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string[]>>({});
-  const [created, setCreated] = useState<{ email: string; password: string | null } | null>(null);
+  const [created, setCreated] = useState<{ email: string; password: string | null; linkedStaff: boolean } | null>(null);
   const { pending, run } = useServerAction();
 
   const isStudent = roles.includes("student");
@@ -91,6 +91,7 @@ export function AddUserDialog({ staff, students, canGrantSuper }: { staff: Linka
                 <p className="mt-1 text-xs">Ask the user to change it after signing in (Account › Password).</p>
               </>
             ) : <p>The password you set is active now.</p>}
+            {created.linkedStaff && <p className="mt-1">Linked to the staff record with this email.</p>}
           </Alert>
         ) : (
           <div className="space-y-4">
@@ -120,7 +121,13 @@ export function AddUserDialog({ staff, students, canGrantSuper }: { staff: Linka
               <Input id="add-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
             </Field>
             <Field label="Email (used to sign in)" htmlFor="add-email" required error={errors.email?.[0]}>
-              <Input id="add-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
+              <Input id="add-email" type="email" value={email} autoComplete="off" onChange={(e) => {
+                const v = e.target.value;
+                setEmail(v);
+                // Typing the email of a staff record selects that record automatically.
+                const match = staff.find((x) => x.email && x.email.toLowerCase() === v.trim().toLowerCase());
+                if (match && !isStudent) { setStaffId(match.id); if (!name) setName(match.full_name); }
+              }} />
             </Field>
             <Field label="Phone" htmlFor="add-phone" error={errors.phone?.[0]}>
               <Input id="add-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />

@@ -54,7 +54,10 @@ export function createAction<S extends z.ZodType, T>(
       if (result && typeof result === "object" && "ok" in result) return result as ActionResult<T>;
       return { ok: true, data: result as T };
     } catch (err) {
-      if (err instanceof ActionError) return { ok: false, error: err.message };
+      if (err instanceof ActionError) {
+        console.warn("[action refused]", err.message);
+        return { ok: false, error: err.message };
+      }
       // Next.js control-flow errors (redirect/notFound) must propagate.
       if (err && typeof err === "object" && "digest" in err) throw err;
       console.error("[action error]", err);
