@@ -34,13 +34,15 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
   const manage = can(session, "users.manage");
   const [{ data: profiles }, { data: staffLinks }, { data: studentLinks }, { data: freeStaff }, { data: freeStudents }] = await Promise.all([
     q,
-    supabase.from("staff").select("id, profile_id").not("profile_id", "is", null),
+    supabase.from("staff").select("id, profile_id, full_name, employee_id").not("profile_id", "is", null),
     supabase.from("students").select("id, profile_id").not("profile_id", "is", null),
     // Records without a login, offered when adding a user.
     manage ? supabase.from("staff").select("id, full_name, employee_id, email").is("profile_id", null).order("full_name").limit(1000) : Promise.resolve({ data: [] }),
     manage ? supabase.from("students").select("id, full_name, admission_no, email").is("profile_id", null).eq("status", "active").order("full_name").limit(5000) : Promise.resolve({ data: [] }),
   ]);
   const staffBy = new Map((staffLinks ?? []).map((s) => [s.profile_id, s.id]));
+  const staffInfoBy = new Map((staffLinks ?? []).map((s) => [s.profile_id, { id: s.id, label: `${s.employee_id} · ${s.full_name}` }]));
+  const staffOptions = (freeStaff ?? []).map((s) => ({ id: s.id, label: `${s.employee_id} · ${s.full_name}` }));
   const studentBy = new Map((studentLinks ?? []).map((s) => [s.profile_id, s.id]));
   const rows = (profiles ?? []).map((p) => ({ ...p, roles: p.user_roles.map((r) => r.roles?.key).filter((x): x is string => !!x) }))
     .filter((p) => !roleFilter || p.roles.includes(roleFilter));
@@ -79,7 +81,8 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
                       <TableCell>{u.is_active ? <Badge variant="success">Active</Badge> : <Badge variant="muted">Deactivated</Badge>}</TableCell>
                       <TableCell className="text-right">{manage && (
                         <UserRowActions
-                          user={{ id: u.id, name: u.full_name, email: u.email ?? "", phone: u.phone ?? null, roles: u.roles, active: u.is_active, linked: staffBy.get(u.id) ? "staff" : studentBy.get(u.id) ? "student" : null }}
+                          user={{ id: u.id, name: u.full_name, email: u.email ?? "", phone: u.phone ?? null, roles: u.roles, active: u.is_active, linked: staffBy.get(u.id) ? "staff" : studentBy.get(u.id) ? "student" : null, staff: staffInfoBy.get(u.id) ?? null }}
+                          staffOptions={staffOptions}
                           isSelf={u.id === session.userId}
                           isSuper={isSuper}
                         />

@@ -5,7 +5,7 @@ import { MoreHorizontal, Pencil, KeyRound, Mail, Power, Trash2, Copy } from "luc
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+import { Input, NativeSelect } from "@/components/ui/input";
 import { Field } from "@/components/shared/field";
 import { Alert } from "@/components/ui/misc";
 import { RolePicker } from "@/components/users/role-picker";
@@ -20,9 +20,13 @@ export type UserRowData = {
   roles: string[];
   active: boolean;
   linked: "staff" | "student" | null;
+  /** The staff record linked to this login, if any. */
+  staff: { id: string; label: string } | null;
 };
 
-export function UserRowActions({ user, isSelf, isSuper }: { user: UserRowData; isSelf: boolean; isSuper: boolean }) {
+export type StaffOption = { id: string; label: string };
+
+export function UserRowActions({ user, isSelf, isSuper, staffOptions = [] }: { user: UserRowData; isSelf: boolean; isSuper: boolean; staffOptions?: StaffOption[] }) {
   const [dialog, setDialog] = useState<null | "edit" | "password" | "delete">(null);
   const { pending, run } = useServerAction();
   const targetIsSuper = user.roles.includes("super_admin");
@@ -35,13 +39,14 @@ export function UserRowActions({ user, isSelf, isSuper }: { user: UserRowData; i
   const [email, setEmail] = useState(user.email);
   const [phone, setPhone] = useState(user.phone ?? "");
   const [roles, setRoles] = useState<string[]>(user.roles);
+  const [staffId, setStaffId] = useState(user.staff?.id ?? "");
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   // Password / delete state
   const [newPw, setNewPw] = useState("");
   const [shownPw, setShownPw] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
 
-  const openEdit = () => { setName(user.name); setEmail(user.email); setPhone(user.phone ?? ""); setRoles(user.roles); setErrors({}); setDialog("edit"); };
+  const openEdit = () => { setName(user.name); setEmail(user.email); setPhone(user.phone ?? ""); setRoles(user.roles); setStaffId(user.staff?.id ?? ""); setErrors({}); setDialog("edit"); };
   const close = () => { setDialog(null); setNewPw(""); setShownPw(null); setConfirmText(""); };
 
   return (
@@ -81,13 +86,23 @@ export function UserRowActions({ user, isSelf, isSuper }: { user: UserRowData; i
               <Input id={`e-phone-${user.id}`} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
             </Field>
             <RolePicker value={roles} onChange={setRoles} canGrantSuper={isSuper} idPrefix={`e-${user.id}`} />
+            {!roles.includes("student") && user.linked !== "student" && (
+              <Field label="Staff record" htmlFor={`e-staff-${user.id}`} hint="Link this login to the person's staff record. Teachers need this to see their classes and timetable.">
+                <NativeSelect id={`e-staff-${user.id}`} value={staffId} onChange={(e) => setStaffId(e.target.value)}>
+                  <option value="">— Not linked —</option>
+                  {user.staff && <option value={user.staff.id}>{user.staff.label}</option>}
+                  {staffOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </NativeSelect>
+              </Field>
+            )}
+            {roles.includes("teacher") && !staffId && <Alert variant="warning">A Teacher without a linked staff record will not see any classes.</Alert>}
             {user.linked === "student" && !roles.includes("student") && <Alert variant="warning">This login is linked to a student record. Removing the Student role stops the student portal from working for them.</Alert>}
             {user.linked === "staff" && roles.includes("student") && <Alert variant="warning">This login is linked to a staff record; the Student role is meant for student logins.</Alert>}
             {!roles.length && <Alert variant="warning">With no role the user can sign in but sees nothing.</Alert>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={close}>Cancel</Button>
-            <Button loading={pending} onClick={() => run(() => updateUser({ user_id: user.id, full_name: name, email, phone, roles }), {
+            <Button loading={pending} onClick={() => run(() => updateUser({ user_id: user.id, full_name: name, email, phone, roles, staff_id: roles.includes("student") || user.linked === "student" ? undefined : staffId }), {
               success: "User updated", onSuccess: close, onError: (r) => setErrors(r.fieldErrors ?? {}),
             })}>Save changes</Button>
           </DialogFooter>

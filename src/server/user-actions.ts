@@ -47,7 +47,7 @@ function authAdminErrorMessage(error: { message?: string; code?: string; status?
   console.error(`[auth admin] ${action}: status=${status} code=${code} message=${message}`);
   const m = message.toLowerCase();
   if (code === "email_exists" || code === "user_already_exists" || m.includes("already")) {
-    return "An account with this email already exists.";
+    return "A login with this email already exists. Find it in the user list and use “Edit user & roles” to add roles or link a staff record instead of creating a new login.";
   }
   if (status === 401 || status === 403 || m.includes("invalid api key") || m.includes("jwt") || code === "no_authorization" || code === "bad_jwt") {
     return `${action}: the server's Supabase secret key is missing, wrong, or from a different Supabase project. Set DCC_SUPABASE_SECRET_KEY (or SUPABASE_SECRET_KEY) in the hosting settings to the secret key of the same Supabase project as NEXT_PUBLIC_SUPABASE_URL, then redeploy.`;
@@ -219,10 +219,13 @@ export const updateUser = createAction(
     email: z.email("Enter a valid email address").max(200).transform((v) => v.toLowerCase()),
     phone,
     roles: z.array(z.enum(ROLE_KEYS as [string, ...string[]])),
+    // undefined = leave as is; "" = unlink; uuid = link this staff record to the login
+    staff_id: z.union([uuid, z.literal("")]).optional(),
   }),
   { permission: "users.manage" },
   async (input, session) => {
     checkRoleMix(input.roles);
+    if (input.staff_id && input.roles.includes("student")) throw new ActionError("A Student login cannot be linked to a staff record.");
     const supabase = await createClient();
     const current = one(await supabase.from("profiles").select("id, email").eq("id", input.user_id).single());
 
@@ -244,6 +247,26 @@ export const updateUser = createAction(
 
     // Roles (audited and permission-checked by the database).
     check(await supabase.rpc("set_user_roles", { p_user_id: input.user_id, p_role_keys: input.roles }));
+
+    // Staff record link (e.g. give an existing login the Teacher role for their own staff record).
+    if (input.staff_id !== undefined) {
+      const linked = check(await supabase.from("staff").select("id").eq("profile_id", input.user_id));
+      const currentStaffId = linked?.[0]?.id ?? "";
+      if (currentStaffId !== input.staff_id) {
+        const admin = createAdminClient();
+        if (input.staff_id) {
+          const staff = one(await supabase.from("staff").select("id, full_name, profile_id").eq("id", input.staff_id).single());
+          if (staff.profile_id) throw new ActionError(`${staff.full_name} is already linked to another login.`);
+        }
+        if (currentStaffId) check(await admin.from("staff").update({ profile_id: null }).eq("id", currentStaffId));
+        if (input.staff_id) check(await admin.from("staff").update({ profile_id: input.user_id, email: input.email }).eq("id", input.staff_id));
+        await admin.rpc("log_audit_as", {
+          p_actor: session.userId, p_action: "account.link_staff", p_entity_type: "profiles", p_entity_id: input.user_id,
+          p_details: { from_staff_id: currentStaffId || null, to_staff_id: input.staff_id || null },
+        });
+        revalidatePath("/staff");
+      }
+    }
     revalidatePath("/users");
     return null;
   },
