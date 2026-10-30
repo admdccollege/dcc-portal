@@ -50,7 +50,7 @@ function authAdminErrorMessage(error: { message?: string; code?: string; status?
     return "An account with this email already exists.";
   }
   if (status === 401 || status === 403 || m.includes("invalid api key") || m.includes("jwt") || code === "no_authorization" || code === "bad_jwt") {
-    return `${action}: the server's Supabase secret key is missing, wrong, or from a different Supabase project. Check SUPABASE_SECRET_KEY in the hosting settings, then redeploy.`;
+    return `${action}: the server's Supabase secret key is missing, wrong, or from a different Supabase project. Set DCC_SUPABASE_SECRET_KEY (or SUPABASE_SECRET_KEY) in the hosting settings to the secret key of the same Supabase project as NEXT_PUBLIC_SUPABASE_URL, then redeploy.`;
   }
   if (code === "email_address_invalid" || m.includes("email address") && m.includes("invalid")) {
     return `${action}: Supabase rejected this email address as invalid. Use a real address (test domains such as example.com are refused).`;

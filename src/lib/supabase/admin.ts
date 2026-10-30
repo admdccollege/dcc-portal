@@ -12,7 +12,9 @@ import type { Database } from "./database.types";
  * `server-only` import makes that a build error.
  */
 export function createAdminClient() {
-  const key = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // DCC_SUPABASE_SECRET_KEY wins when set: hosting integrations can inject their own
+  // SUPABASE_SECRET_KEY for a different Supabase project, which cannot be overridden.
+  const key = process.env.DCC_SUPABASE_SECRET_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) {
     throw new Error(
       "SUPABASE_SECRET_KEY is not configured. Account administration requires the server-side secret key.",
