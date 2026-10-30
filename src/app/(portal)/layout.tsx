@@ -4,6 +4,7 @@ import { ROLES } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { demoEnabled } from "@/lib/demo";
 
 export default async function PortalLayout({ children }: LayoutProps<"/">) {
   const session = await requireSession();
@@ -28,6 +29,11 @@ export default async function PortalLayout({ children }: LayoutProps<"/">) {
       </a>
       <Sidebar items={items} shortName={shortName} name={name} />
       <div className="flex min-w-0 flex-1 flex-col">
+        {demoEnabled() && (
+          <div className="no-print bg-amber-100 px-3 py-1 text-center text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
+            Demo mode — login bypassed. Do not use with real student data.
+          </div>
+        )}
         <Header
           items={items}
           userName={session.fullName}

@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   if (guard instanceof Response) return guard;
   const url = new URL(request.url);
   const supabase = await createClient();
-  let q = supabase.from("audit_logs").select("created_at, action, entity_type, entity_id, details, profiles(full_name, email)").order("created_at", { ascending: false }).limit(10000);
+  let q = supabase.from("audit_logs").select("created_at, action, entity_type, entity_id, details, actor_label, profiles(full_name, email)").order("created_at", { ascending: false }).limit(10000);
   const entity = qp(url, "entity");
   const day = qp(url, "date");
   if (entity && /^[a-z_]+$/.test(entity)) q = q.eq("entity_type", entity);
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   type Row = NonNullable<typeof data>[number];
   return exportResponse(url.searchParams.get("format"), data ?? [], [
     { header: "Time", value: (r: Row) => r.created_at },
-    { header: "Actor", value: (r) => r.profiles?.email ?? "system" },
+    { header: "Actor", value: (r) => r.profiles?.email ?? (r.actor_label ? `${r.actor_label} (deleted)` : "system") },
     { header: "Action", value: (r) => r.action },
     { header: "Entity", value: (r) => r.entity_type },
     { header: "Entity ID", value: (r) => r.entity_id },

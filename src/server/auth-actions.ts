@@ -7,8 +7,31 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { publicEnv } from "@/lib/env";
 import { getSession } from "@/lib/auth/session";
+import { demoCredentials, demoEnabled, isMockCredentials, safeNext } from "@/lib/demo";
 
 export type FormState = { error?: string; message?: string } | null;
+
+/** Signs in as the configured demo account. Returns an error message or null. */
+async function signInAsDemoUser(): Promise<string | null> {
+  if (!demoEnabled()) return "Demo mode is not enabled on this server.";
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword(demoCredentials());
+  if (error) return "Demo sign-in failed. Check DEMO_LOGIN_EMAIL / DEMO_LOGIN_PASSWORD and that the demo seed is loaded.";
+  const session = await getSession();
+  if (!session) {
+    await supabase.auth.signOut();
+    return "The demo account is inactive.";
+  }
+  return null;
+}
+
+/** "Bypass Login / Demo Mode" button on the sign-in page. */
+export async function signInDemo(_prev: FormState, formData: FormData): Promise<FormState> {
+  const error = await signInAsDemoUser();
+  if (error) return { error };
+  const next = formData.get("next");
+  redirect(safeNext(typeof next === "string" ? next : undefined));
+}
 
 async function clientKey() {
   const h = await headers();
@@ -21,13 +44,15 @@ const signInSchema = z.object({
   next: z.string().optional(),
 });
 
-/** Only allow same-site relative redirects after login (prevents open redirects). */
-function safeNext(next: string | undefined): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/";
-  return next;
-}
-
 export async function signIn(_prev: FormState, formData: FormData): Promise<FormState> {
+  // Demo mode: the mock credentials "admin / password123" sign in as the demo account.
+  if (isMockCredentials(formData.get("email"), formData.get("password"))) {
+    const error = await signInAsDemoUser();
+    if (error) return { error };
+    const next = formData.get("next");
+    redirect(safeNext(typeof next === "string" ? next : undefined));
+  }
+
   const parsed = signInSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 

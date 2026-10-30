@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { CollegeMark, NavLinks } from "./sidebar";
 import type { NavItem } from "@/lib/navigation";
 import { signOut } from "@/server/auth-actions";
+import { clearOfflinePages } from "@/components/offline/offline-support";
 import { markNotificationsRead } from "@/server/notification-actions";
 import { formatDate } from "@/lib/utils";
 
@@ -123,7 +124,7 @@ export function Header({
             <Link href="/account/password"><KeyRound /> Change password</Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => startTransition(() => signOut())} className="text-destructive focus:text-destructive">
+          <DropdownMenuItem onSelect={() => { clearOfflinePages(); startTransition(() => signOut()); }} className="text-destructive focus:text-destructive">
             <LogOut /> Sign out
           </DropdownMenuItem>
         </DropdownMenuContent>

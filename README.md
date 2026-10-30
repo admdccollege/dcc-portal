@@ -80,6 +80,36 @@ All demo accounts use the password **`DccDemo@2026`**. All people and data in th
 | Student (Class XI Science) | `student.science@dcc.example` |
 | Student (FYUP B.A.) | `student.arts@dcc.example` |
 
+### Demo mode — bypass login
+
+For demos and local testing you can skip the login screen entirely. Add this to `.env.local` and restart `pnpm dev`:
+
+```bash
+DEMO_MODE=true
+```
+
+- Opening the portal signs you in automatically as the seeded **Super Administrator** and goes straight to the dashboard (`/auth/demo` does the same in one tap).
+- After signing out, the login page shows a **Bypass Login / Demo Mode** button, and the mock credentials **`admin` / `password123`** also work.
+- A yellow "Demo mode" strip is shown above the header while it is on.
+- Use `DEMO_LOGIN_EMAIL` / `DEMO_LOGIN_PASSWORD` to demo as a different role (e.g. `student.science@dcc.example`).
+
+> ⚠️ Demo mode still performs a real Supabase sign-in, so Row Level Security and permissions keep working — but **anyone who can reach the site becomes that user**. Never enable it on a deployment holding real student data.
+
+### Offline support (web and mobile apps)
+
+The portal registers a service worker (`public/sw.js`) in production builds; it also works inside the Android app, which uses a standard WebView. Pages a user opens while online are saved on that device and can be read offline (read-only); unsaved pages show `public/offline.html`, which lists what is available. An orange banner appears while offline. Saved pages are erased on sign-out and on the sign-in screen. API routes, exports, PDFs and all changes always go to the server. Set `NEXT_PUBLIC_ENABLE_SW=true` to try it under `pnpm dev`.
+
+### User administration
+
+Under **Users & Permissions** a Super Administrator can:
+
+- **Add user** — name, email, phone, one or more roles, and a temporary or chosen password. Student logins are linked to a student record; staff logins can be linked to a staff record (Teachers need this to see their classes).
+- **Edit user & roles** — name, email (sign-in address), phone and roles.
+- **Set temporary password**, **send reset email**, **deactivate / reactivate**.
+- **Delete user** — permanently removes the login. Payments, marks, attendance and audit history are kept and show the person as deleted; linked student/staff records stay. Nobody can delete themselves or the last Super Administrator, and only Super Administrators can create, edit or delete Super Administrators. Every change is written to the audit log.
+
+Requires `SUPABASE_SECRET_KEY` on the server and the migration `20261030000011_user_administration.sql`.
+
 The seed includes 176 students across all programmes, 20 days of attendance, a **published** Unit Test (Class XI Science), an internal assessment with marks entry in progress, a scheduled terminal exam, fee structures with payments (one reversed), a concession, admissions in several states, a timetable and targeted notices.
 
 > ⚠️ The seed contains **sample** grading schemes clearly labelled “verify”. They are not official COHSEM or Manipur University rules. Configure and verify the real regulations under **Settings › Grading schemes** before processing official results.

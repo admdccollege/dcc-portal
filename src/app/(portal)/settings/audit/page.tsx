@@ -34,7 +34,7 @@ export default async function AuditPage({ searchParams }: PageProps<"/settings/a
   const day = /^\d{4}-\d{2}-\d{2}$/.test(param(sp.date) ?? "") ? param(sp.date) : undefined;
   const action = param(sp.action)?.replace(/[^a-z_.]/g, "");
 
-  let q = supabase.from("audit_logs").select("id, action, entity_type, entity_id, details, created_at, actor_id, profiles(full_name, email)", { count: "exact" }).order("created_at", { ascending: false }).range(from, to);
+  let q = supabase.from("audit_logs").select("id, action, entity_type, entity_id, details, created_at, actor_id, actor_label, profiles(full_name, email)", { count: "exact" }).order("created_at", { ascending: false }).range(from, to);
   if (entity) q = q.eq("entity_type", entity);
   if (action) q = q.ilike("action", `${action}%`);
   if (day) q = q.gte("created_at", `${day}T00:00:00+05:30`).lt("created_at", `${day}T23:59:59.999+05:30`);
@@ -58,7 +58,7 @@ export default async function AuditPage({ searchParams }: PageProps<"/settings/a
               {logs.map((l) => (
                 <TableRow key={l.id}>
                   <TableCell className="whitespace-nowrap text-xs">{formatDate(l.created_at, true)}</TableCell>
-                  <TableCell className="text-sm">{l.profiles?.full_name ?? (l.actor_id ? "User" : "System")}</TableCell>
+                  <TableCell className="text-sm">{l.profiles?.full_name ?? (l.actor_label ? `${l.actor_label} (deleted)` : l.actor_id ? "User" : "System")}</TableCell>
                   <TableCell className="font-mono text-xs">{l.action}</TableCell>
                   <TableCell className="text-xs">{l.entity_type}<span className="block font-mono text-muted-foreground">{l.entity_id?.slice(0, 8)}</span></TableCell>
                   <TableCell className="max-w-md truncate text-xs text-muted-foreground" title={JSON.stringify(l.details)}>{summarise(l.details)}</TableCell>

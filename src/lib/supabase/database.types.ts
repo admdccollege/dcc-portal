@@ -243,14 +243,14 @@ isOneToOne: false
                   ]
                 },"audit_logs": {
                   Row: {
-                    "action": string,"actor_id": string | null,"created_at": string,"details": NonNullable<Json>,"entity_id": string | null,"entity_type": string,"id": number
+                    "action": string,"actor_id": string | null,"actor_label": string | null,"created_at": string,"details": NonNullable<Json>,"entity_id": string | null,"entity_type": string,"id": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "action": string,"actor_id"?: string | null,"created_at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string | null,"entity_type": string,"id"?: never
+                    "action": string,"actor_id"?: string | null,"actor_label"?: string | null,"created_at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string | null,"entity_type": string,"id"?: never
                   }
                   Update: {
-                    "action"?: string,"actor_id"?: string | null,"created_at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string | null,"entity_type"?: string,"id"?: never
+                    "action"?: string,"actor_id"?: string | null,"actor_label"?: string | null,"created_at"?: string,"details"?: NonNullable<Json>,"entity_id"?: string | null,"entity_type"?: string,"id"?: never
                   }
                   Relationships: [
                     {
@@ -1570,6 +1570,9 @@ isOneToOne: false
             "add_candidates_from_failures":
 { Args: { "p_source_exam_id": string,"p_target_exam_id": string }; Returns: number
                            },
+"admin_update_profile":
+{ Args: { "p_full_name": string,"p_phone": string,"p_user_id": string }; Returns: undefined
+                           },
 "assign_fee_structure":
 { Args: { "p_fee_structure_id": string,"p_optional_head_ids"?: (string)[],"p_student_ids": (string)[] }; Returns: number
                            },
@@ -1765,6 +1768,9 @@ isOneToOne: false
                            },
 "transition_examination":
 { Args: { "p_exam_id": string,"p_reason"?: string,"p_to": Database["public"]['Enums']["exam_status"] }; Returns: undefined
+                           },
+"user_deletion_check":
+{ Args: { "p_user_id": string }; Returns: Json
                            },
 "verify_admission_document":
 { Args: { "p_document_id": string,"p_remarks"?: string,"p_verified": boolean }; Returns: undefined

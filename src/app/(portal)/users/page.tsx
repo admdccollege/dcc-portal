@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { UserRowActions } from "@/components/user-row-actions";
+import { AddUserDialog } from "@/components/users/add-user-dialog";
 import { PERMISSIONS, ROLES, ROLE_KEYS, ROLE_PERMISSIONS, type Permission } from "@/lib/auth/permissions";
 import { formatDate, searchFilter } from "@/lib/utils";
 
@@ -23,30 +24,43 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
   const sp = await searchParams;
   const supabase = await createClient();
   const roleFilter = ROLE_KEYS.find((r) => r === param(sp.role));
+  const statusFilter = param(sp.status);
 
-  let q = supabase.from("profiles").select("id, full_name, email, is_active, last_seen_at, created_at, user_roles!user_roles_user_id_fkey(roles(key))").order("full_name").limit(500);
+  let q = supabase.from("profiles").select("id, full_name, email, phone, is_active, last_seen_at, created_at, user_roles!user_roles_user_id_fkey(roles(key))").order("full_name").limit(500);
   const search = searchFilter(["full_name", "email"], param(sp.q));
   if (search) q = q.or(search);
-  const [{ data: profiles }, { data: staffLinks }, { data: studentLinks }] = await Promise.all([
+  if (statusFilter === "active") q = q.eq("is_active", true);
+  if (statusFilter === "inactive") q = q.eq("is_active", false);
+  const manage = can(session, "users.manage");
+  const [{ data: profiles }, { data: staffLinks }, { data: studentLinks }, { data: freeStaff }, { data: freeStudents }] = await Promise.all([
     q,
     supabase.from("staff").select("id, profile_id").not("profile_id", "is", null),
     supabase.from("students").select("id, profile_id").not("profile_id", "is", null),
+    // Records without a login, offered when adding a user.
+    manage ? supabase.from("staff").select("id, full_name, employee_id, email").is("profile_id", null).order("full_name").limit(1000) : Promise.resolve({ data: [] }),
+    manage ? supabase.from("students").select("id, full_name, admission_no, email").is("profile_id", null).eq("status", "active").order("full_name").limit(5000) : Promise.resolve({ data: [] }),
   ]);
   const staffBy = new Map((staffLinks ?? []).map((s) => [s.profile_id, s.id]));
   const studentBy = new Map((studentLinks ?? []).map((s) => [s.profile_id, s.id]));
   const rows = (profiles ?? []).map((p) => ({ ...p, roles: p.user_roles.map((r) => r.roles?.key).filter((x): x is string => !!x) }))
     .filter((p) => !roleFilter || p.roles.includes(roleFilter));
   const modules = [...new Set(Object.values(PERMISSIONS).map((p) => p.module))];
-  const manage = can(session, "users.manage");
   const isSuper = session.roles.includes("super_admin");
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Users & Permissions" description="Login accounts, role assignment and the role permission matrix. Create logins from a staff or student record." />
+      <PageHeader
+        title="Users & Permissions"
+        description="Add, edit and remove login accounts, assign roles, and review the role permission matrix."
+        actions={manage ? <AddUserDialog staff={(freeStaff ?? []).map((s) => ({ ...s, email: s.email ?? null }))} students={(freeStudents ?? []).map((s) => ({ ...s, email: s.email ?? null }))} canGrantSuper={isSuper} /> : undefined}
+      />
       <Tabs defaultValue="users">
         <TabsList><TabsTrigger value="users">User accounts</TabsTrigger><TabsTrigger value="matrix">Permission matrix</TabsTrigger></TabsList>
         <TabsContent value="users" className="space-y-4">
-          <FilterBar searchPlaceholder="Name or email…" filters={[{ name: "role", label: "Roles", options: ROLE_KEYS.map((r) => ({ value: r, label: ROLES[r].name })) }]} />
+          <FilterBar searchPlaceholder="Name or email…" filters={[
+            { name: "role", label: "Roles", options: ROLE_KEYS.map((r) => ({ value: r, label: ROLES[r].name })) },
+            { name: "status", label: "Statuses", options: [{ value: "active", label: "Active" }, { value: "inactive", label: "Deactivated" }] },
+          ]} />
           <Card>
             {!rows.length ? <div className="p-6"><EmptyState title="No users found" /></div> : (
               <Table>
@@ -63,7 +77,13 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
                       </TableCell>
                       <TableCell className="text-sm">{formatDate(u.last_seen_at, true)}</TableCell>
                       <TableCell>{u.is_active ? <Badge variant="success">Active</Badge> : <Badge variant="muted">Deactivated</Badge>}</TableCell>
-                      <TableCell className="text-right">{manage && <UserRowActions userId={u.id} name={u.full_name || u.email || "user"} roles={u.roles} active={u.is_active} isSelf={u.id === session.userId} canGrantSuper={isSuper} />}</TableCell>
+                      <TableCell className="text-right">{manage && (
+                        <UserRowActions
+                          user={{ id: u.id, name: u.full_name, email: u.email ?? "", phone: u.phone ?? null, roles: u.roles, active: u.is_active, linked: staffBy.get(u.id) ? "staff" : studentBy.get(u.id) ? "student" : null }}
+                          isSelf={u.id === session.userId}
+                          isSuper={isSuper}
+                        />
+                      )}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
